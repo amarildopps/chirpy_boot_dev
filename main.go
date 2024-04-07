@@ -7,14 +7,28 @@ import (
 
 func main() {
 
+	apiConfig := apiConfig{}
+	filepathRoot, port := ".", "8080"
+	fileServerAddr := http.StripPrefix("/app", http.FileServer(http.Dir(filepathRoot)))
+
 	mux := http.NewServeMux()
+
+	// static files
+	mux.Handle("/app/*", apiConfig.middlewareMetricsInc(fileServerAddr))
+	mux.HandleFunc("GET /admin/metrics", apiConfig.adminMetricsHandler)
+	// api endpoints
+	mux.HandleFunc("GET /api/healthz", readinessHandler)
+	mux.HandleFunc("GET /api/metrics", apiConfig.countMetrics)
+	mux.HandleFunc("/api/reset", apiConfig.resetMetrics)
+
 	corsMux := middlewareCors(mux)
 
 	server := &http.Server{
 		Handler: corsMux,
-		Addr:    ":8080",
+		Addr:    ":" + port,
 	}
 
+	log.Printf("Serving files from %s on port: %s\n", filepathRoot, port)
 	err := server.ListenAndServe()
 	if err != nil {
 		log.Fatal(err)
