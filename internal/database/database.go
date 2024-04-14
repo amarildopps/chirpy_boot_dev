@@ -27,32 +27,37 @@ type DBStructure struct {
 // and creates the database file if it doesn't exist
 func NewDB(path string) (*DB, error) {
 
-	_, err := os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		fmt.Println("File doens't exists")
-		file, err := os.Create(path)
-		if err != nil {
-			return nil, err
-		}
-		file.Close()
-	} else if err != nil {
-		return nil, err
-	}
-
 	db := &DB{
 		Path: path,
 		Mux:  &sync.RWMutex{},
+	}
+	err := db.ensureDB()
+	if err != nil {
+		return nil, err
 	}
 
 	return db, nil
 
 }
 
-// CreateChirp creates a new chirp and saves it to disk
-func (db *DB) CreateChirp(body string) (Chirp, error) {
-	// Lock the mutex to ensure thread safety
-	db.Mux.Lock()
-	defer db.Mux.Unlock()
+// ensureDB creates a new database file if it doesn't exist
+func (db *DB) ensureDB() error {
+	_, err := os.Stat(db.Path)
+	if errors.Is(err, os.ErrNotExist) {
+		fmt.Println("File doens't exists")
+		file, err := os.Create(db.Path)
+		if err != nil {
+			return err
+		}
+		file.Close()
+	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
+// loadDB reads the database file into memory
+func (db *DB) loadDB() (DBStructure, error) {
 
 	// Initialize the DBStructure
 	dbStructure := DBStructure{
@@ -62,7 +67,7 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 	// Read the current database file
 	file, err := os.Open(db.Path)
 	if err != nil {
-		return Chirp{}, err
+		return DBStructure{}, err
 	} else {
 		defer file.Close()
 		decoder := json.NewDecoder(file)
@@ -72,9 +77,41 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 				// If EOF, it means the file is empty; initialize empty structure
 				dbStructure.Chirps = make(map[int]Chirp)
 			} else {
-				return Chirp{}, err
+				return DBStructure{}, err
 			}
 		}
+	}
+	return dbStructure, nil
+}
+
+// writeDB writes the database file to disk
+func (db *DB) writeDB(dbStructure DBStructure) error {
+
+	file, err := os.Create(db.Path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	err = encoder.Encode(&dbStructure)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// CreateChirp creates a new chirp and saves it to disk
+func (db *DB) CreateChirp(body string) (Chirp, error) {
+
+	// Lock the mutex to ensure thread safety
+	db.Mux.Lock()
+	defer db.Mux.Unlock()
+
+	// Initialize the DBStructure
+	dbStructure, err := db.loadDB()
+	if err != nil {
+		return Chirp{}, err
 	}
 
 	newId := 1
@@ -91,15 +128,7 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 
 	dbStructure.Chirps[newId] = newChirp
 
-	file, err = os.Create(db.Path)
-	if err != nil {
-		return Chirp{}, err
-	}
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	err = encoder.Encode(&dbStructure)
-	file.Close()
+	err = db.writeDB(dbStructure)
 	if err != nil {
 		return Chirp{}, err
 	}
@@ -111,15 +140,7 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 // GetChirps returns all chirps in the database
 func (db *DB) GetChirps() ([]Chirp, error) {
 
-	file, err := os.Open(db.Path)
-	if err != nil {
-		return []Chirp{}, err
-	}
-
-	dbStructure := DBStructure{}
-
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&dbStructure)
+	dbStructure, err := db.loadDB()
 	if err != nil {
 		return []Chirp{}, err
 	}

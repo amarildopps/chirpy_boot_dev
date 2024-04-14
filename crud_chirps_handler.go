@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/amarildopps/chirpy_boot_dev/internal/database"
@@ -31,10 +30,8 @@ func (db *databaseConfig) addChirpHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	chirpyResult := database.Chirp{}
-	fmt.Println("Body:", params.Body)
 	chirpyResult, err = db.DB.CreateChirp(params.Body)
 	if err != nil {
-		fmt.Println(err)
 		respondWithError(w, 500, err.Error())
 		return
 	}
