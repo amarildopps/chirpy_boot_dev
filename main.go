@@ -3,9 +3,24 @@ package main
 import (
 	"log"
 	"net/http"
+
+	"github.com/amarildopps/chirpy_boot_dev/internal/database"
 )
 
+type databaseConfig struct {
+	DB *database.DB
+}
+
 func main() {
+
+	var err error
+	dbConfig := databaseConfig{
+		DB: &database.DB{},
+	}
+	dbConfig.DB, err = database.NewDB("./database.json")
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	apiConfig := apiConfig{}
 	filepathRoot, port := ".", "8080"
@@ -20,6 +35,9 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", readinessHandler)
 	mux.HandleFunc("GET /api/metrics", apiConfig.countMetrics)
 	mux.HandleFunc("/api/reset", apiConfig.resetMetrics)
+	// mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler)
+	mux.HandleFunc("POST /api/chirp", dbConfig.addChirpHandler)
+	mux.HandleFunc("GET /api/chirps", dbConfig.getChirpys)
 
 	corsMux := middlewareCors(mux)
 
@@ -29,7 +47,7 @@ func main() {
 	}
 
 	log.Printf("Serving files from %s on port: %s\n", filepathRoot, port)
-	err := server.ListenAndServe()
+	err = server.ListenAndServe()
 	if err != nil {
 		log.Fatal(err)
 	}
